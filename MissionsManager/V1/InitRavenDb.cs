@@ -21,6 +21,7 @@ namespace MissionsManager.V1
 #endif
             _store = EmbeddedServer.Instance.GetDocumentStore("MI6Missions");
             new Country_Total().Execute(_store, _store.Conventions, "MI6Missions");
+            new IsolatedAgents_Total().Execute(_store, _store.Conventions, "MI6Missions");
         }
 
         public IDocumentStore GetDocumentStore()

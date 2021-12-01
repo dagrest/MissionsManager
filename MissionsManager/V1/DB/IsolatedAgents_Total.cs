@@ -2,7 +2,7 @@
 
 namespace MissionsManager.V1.DB
 {
-    public class Index_IsolatedAgents : AbstractIndexCreationTask
+    public class IsolatedAgents_Total : AbstractIndexCreationTask
     {
         public class Result
         {

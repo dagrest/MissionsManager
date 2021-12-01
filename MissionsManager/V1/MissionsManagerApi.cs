@@ -25,9 +25,9 @@ namespace MissionsManager.V1
             var countryWithMostIsolationDegree = "Unknown";
             using (var session = store.OpenSession())
             {
-                IList<Index_IsolatedAgents.Result> resultIsolatedAgents =
+                IList<IsolatedAgents_Total.Result> resultIsolatedAgents =
                     session
-                        .Query<Index_IsolatedAgents.Result, Index_IsolatedAgents>()
+                        .Query<IsolatedAgents_Total.Result, IsolatedAgents_Total>()
                         .Where(x => x.count == 1)
                         .ToList();
 
