@@ -16,8 +16,8 @@ namespace MissionsManager.V1
             Post("/mission", async (req, res) =>
                 await missionsManagerApi.AddMissionAsync(req, res, store));
 
-            Post("/find-closest", async (req, res) =>
-                await missionsManagerApi.FindClosestMissionAsync(req, res, store));
+            Post("/find-closest", (req, res) =>
+                missionsManagerApi.FindClosestMission(req, res, store));
 
             Post("/init_db", async (req, res) =>
                 await res.AsJson(missionsManagerApi.InitMissionAsync(req, res, store)));

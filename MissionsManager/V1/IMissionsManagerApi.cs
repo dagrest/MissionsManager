@@ -10,7 +10,7 @@ namespace MissionsManager.V1
     {
         public Task<FindCountryByIsolationResponse> FindCountryByIsolationAsync(HttpRequest req, IDocumentStore store);
         public Task AddMissionAsync(HttpRequest req, HttpResponse res, IDocumentStore store);
-        public Task FindClosestMissionAsync(HttpRequest req, HttpResponse res, IDocumentStore store);
+        public Task FindClosestMission(HttpRequest req, HttpResponse res, IDocumentStore store);
         public Task InitMissionAsync(HttpRequest req, HttpResponse res, IDocumentStore store);
 
     }

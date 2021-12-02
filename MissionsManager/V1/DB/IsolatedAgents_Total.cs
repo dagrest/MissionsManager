@@ -20,8 +20,6 @@ namespace MissionsManager.V1.DB
                 Maps =
                 {
                     @"from m in docs.Missions
-                    //where company.Address.Country == ""USA""
-                    //test string
                     select new {
                          m.Agent,
                          count = 1

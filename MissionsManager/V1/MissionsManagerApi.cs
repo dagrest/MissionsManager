@@ -6,10 +6,14 @@ using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using Carter.Response;
+using GoogleMapsGeocoding;
+using GoogleMapsGeocoding.Common;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.TagHelpers;
 using MissionsManager.V1.DB;
 using MissionsManager.V1.Models;
 using Newtonsoft.Json;
+using Raven.Client;
 using Raven.Client.Documents;
 using Raven.Client.Documents.Linq;
 using Raven.Client.Documents.Operations;
@@ -75,7 +79,6 @@ namespace MissionsManager.V1
                     isolationDegree = countriesByIsolationDegree[0].Count;
                     countryWithMostIsolationDegree = countriesByIsolationDegree[0].Country;
                 }
-
             }
 
             return new FindCountryByIsolationResponse { MostIsolationDegreeCountry = countryWithMostIsolationDegree, IsolationDegree = isolationDegree };
@@ -90,20 +93,41 @@ namespace MissionsManager.V1
             // Add mission to DB
             using (var session = store.OpenAsyncSession())
             {
+                var (latitude, longitude) =
+                    GetGeolocation(bodyArguments["address"] + " " + bodyArguments["country"]);
                 await session.StoreAsync(new Mission 
                     { Agent = bodyArguments["agent"], 
                         Country = bodyArguments["country"], 
                         Address = bodyArguments["address"], 
-                        Date = DateTime.Parse(bodyArguments["date"])
-                    });
+                        Date = DateTime.Parse(bodyArguments["date"]),
+                        Latitude = latitude,
+                        Longitude = longitude
+                });
                 await session.SaveChangesAsync();
                 res.StatusCode = 200;
             }
         }
 
-        public async Task FindClosestMissionAsync(HttpRequest req, HttpResponse res, IDocumentStore store)
+        public Task FindClosestMission(HttpRequest req, HttpResponse res, IDocumentStore store)
         {
-            AddMissionInputValidation(req, res, new string[] { "target-location" });
+            var bodyArguments = 
+                AddMissionInputValidation(req, res, new string[] { "target-location" });
+
+            using (var session = store.OpenSession())
+            {
+                var (latitude, longitude) =
+                    GetGeolocation(bodyArguments["target-location"]);
+
+                var closestMissions = session.Query<Mission, Spatial_Index>()
+                    .Spatial("Coordinates", factory => factory.WithinRadius(10, latitude, longitude))
+                    .Customize(x => x
+                        .WaitForNonStaleResults()
+                    ).ToList();
+
+                res.StatusCode = 200;
+            }
+
+            return Task.CompletedTask;
         }
 
         public async Task InitMissionAsync(HttpRequest req, HttpResponse res, IDocumentStore store)
@@ -137,7 +161,18 @@ namespace MissionsManager.V1
             {
                 foreach (var mission in sampleData)
                 {
-                    await session.StoreAsync(new Mission { Agent = mission.Agent, Country = mission.Country, Address = mission.Address, Date = mission.Date });
+                    var (latitude, longitude) =
+                        GetGeolocation(mission.Address + " " + mission.Country);
+                    await session.StoreAsync(
+                        new Mission
+                        {
+                            Agent = mission.Agent, 
+                            Country = mission.Country, 
+                            Address = mission.Address, 
+                            Date = mission.Date, 
+                            Latitude = latitude,
+                            Longitude = longitude
+                        });
                 }
                 await session.SaveChangesAsync();
                 res.StatusCode = 200;
@@ -200,6 +235,24 @@ namespace MissionsManager.V1
                 res.AsJson(errorMessage);
                 throw new ArgumentException(errorMessage);
             }
+        }
+
+        private (double Latitude, double Longitude) GetGeolocation(string address)
+        {
+            //// TODO: move ApiKey to Const
+            //var geoCoder = new Geocoder("GOOGLE_API_KEY");
+
+            //var response = geoCoder.Geocode(address); // address + country
+
+            //var latitude = response.Results[0].Geometry.Location.Lat;
+            //var longitude = response.Results[0].Geometry.Location.Lng;
+
+            //TODO: fix to real address
+            // swietego Tomasza 35, Krakow Poland
+            double latitude = 50.062;
+            double longitude = 19.943;
+
+            return (latitude, longitude);
         }
 
         #endregion // privateFunctions
