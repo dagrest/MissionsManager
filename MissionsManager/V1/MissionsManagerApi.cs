@@ -187,28 +187,17 @@ namespace MissionsManager.V1
         }
 
         #region privateFunctions
-
-
         private (double Latitude, double Longitude) GetGeolocation(string address)
         {
-            // TODO: move ApiKey to Const
-            //var geoCoder = new Geocoder("GOOGLE_API_KEY");
             var response = _geoCoder.Geocode(address); // address + country
             if (response.Status != "OK")
             {
                 throw new AccessViolationException(response.Status);
             }
-            var latitude = response.Results[0].Geometry.Location.Lat;
-            var longitude = response.Results[0].Geometry.Location.Lng;
 
-            ////TODO: fix to real address
-            //// swietego Tomasza 35, Krakow Poland
-            //double latitude = 50.062;
-            //double longitude = 19.943;
-
-            return (latitude, longitude);
+            return (response.Results[0].Geometry.Location.Lat, 
+                response.Results[0].Geometry.Location.Lng);
         }
-
         #endregion // privateFunctions
     }
 }
