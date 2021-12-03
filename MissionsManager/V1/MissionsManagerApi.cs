@@ -35,6 +35,8 @@ namespace MissionsManager.V1
             var countryWithMostIsolationDegree = "Unknown";
             using (var session = store.OpenSession())
             {
+                // Find Agents that took part only in one mission (isolated Agents)
+                // group by Agent and select only with count 1
                 IList<IsolatedAgents_Total.Result> resultIsolatedAgents =
                     session
                         .Query<IsolatedAgents_Total.Result, IsolatedAgents_Total>()
@@ -48,6 +50,7 @@ namespace MissionsManager.V1
                 }
                 isolatedAgentsList.Remove(isolatedAgentsList.Length - 1, 1);
 
+                // Get countries of missions that isolated Agents took part in
                 var resultCountryWithIsolatedAgents = session.Advanced.RawQuery<Mission>
                 (
                     @$"from Missions as m
@@ -55,6 +58,7 @@ namespace MissionsManager.V1
                         select {{ Country: m.Country, Agent: m.Agent}}"
                 ).ToList();
 
+                // Clear table with countries with missions that isolated agents took part
                 var operation = store
                     .Operations
                     .Send(new DeleteByQueryOperation(new IndexQuery
@@ -64,6 +68,7 @@ namespace MissionsManager.V1
 
                 operation.WaitForCompletion(TimeSpan.FromSeconds(15));
 
+                // Store data about countries with missions that isolated agents took part
                 foreach (var doc in resultCountryWithIsolatedAgents)
                 {
                     session.Store(new IsolatedCountry { Country = doc.Country, Agent = doc.Agent });
@@ -71,9 +76,9 @@ namespace MissionsManager.V1
                 session.SaveChanges();
                 operation.WaitForCompletion(TimeSpan.FromSeconds(15));
 
+                // Find country with most isolation degree
                 IList<IsolatedCountry> countriesByIsolationDegree = session
                     .Query<Country_Total.Result, Country_Total>()
-                    //.Where(x => x.Country)
                     .OfType<IsolatedCountry>()
                     .OrderByDescending(x => (int)x.Count)
                     .ToList();
