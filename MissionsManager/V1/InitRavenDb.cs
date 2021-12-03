@@ -1,10 +1,5 @@
-﻿using System;
-using MissionsManager.V1.DB;
-using Newtonsoft.Json;
+﻿using MissionsManager.V1.DB;
 using Raven.Client.Documents;
-using Raven.Client.Documents.Conventions;
-using Raven.Client.Json.Serialization.NewtonsoftJson;
-//using Raven.Client.Spatial.Geo;
 using Raven.Embedded;
 
 namespace MissionsManager.V1

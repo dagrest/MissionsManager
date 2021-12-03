@@ -11,13 +11,13 @@ namespace MissionsManager.V1
             var store = ravenDb.GetDocumentStore();
 
             Get("/countries-by-isolation", async (req, res) =>
-                    await res.AsJson(missionsManagerApi.FindCountryByIsolationAsync(req, store)));
+                    await res.AsJson(missionsManagerApi.FindCountryByIsolation(req, res, store)));
 
             Post("/mission", async (req, res) =>
                 await missionsManagerApi.AddMissionAsync(req, res, store));
 
             Post("/find-closest", (req, res) =>
-                missionsManagerApi.FindClosestMission(req, res, store));
+                res.AsJson(missionsManagerApi.FindClosestMission(req, res, store)));
 
             Post("/init_db", async (req, res) =>
                 await res.AsJson(missionsManagerApi.InitMissionAsync(req, res, store)));

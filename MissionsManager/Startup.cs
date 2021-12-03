@@ -2,18 +2,20 @@
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
 using Carter;
+using GoogleMapsGeocoding;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MissionsManager.V1;
-using Raven.Client.Documents;
+
 
 namespace MissionsManager
 {
     public class Startup
     {
+        private const string GoogleApiKey = "AIzaSyD23uaUWMgEeFeXESUtttRB_fbJBliXcQQ";
         public IConfigurationRoot Configuration { get; private set; }
         public ILifetimeScope AutofacContainer { get; private set; }
         public Startup(IHostingEnvironment env)
@@ -46,7 +48,9 @@ namespace MissionsManager
             // Register your own classes directly with Autofac
             builder.RegisterType<MissionsManagerApi>().As<IMissionsManagerApi>().SingleInstance();
             builder.RegisterType<InitRavenDb>().As<IInitRavenDb>().SingleInstance();
-            //builder.RegisterType<DocumentStore>().As<IDocumentStore>().SingleInstance();
+            builder.RegisterType<Validation>().As<IValidation>().SingleInstance();
+            builder.RegisterType<InputData>().As<IInputData>().SingleInstance();
+            builder.Register(c => new Geocoder(GoogleApiKey)).As<IGeocoder>().SingleInstance();
             // ************************************************************************************
 
             AutofacContainer = builder.Build();
