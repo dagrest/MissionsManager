@@ -1,152 +1,147 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using Carter.Response;
 using GoogleMapsGeocoding;
-using Microsoft.AspNetCore.Http;
 using MissionsManager.V1.DB;
 using MissionsManager.V1.Models;
 using Newtonsoft.Json;
 using Raven.Client.Documents;
 using Raven.Client.Documents.Linq;
-using Raven.Client.Documents.Operations;
-using Raven.Client.Documents.Queries;
 
 namespace MissionsManager.V1
 {
     public class MissionsManagerApi : IMissionsManagerApi
     {
-        private readonly IInputData _inputData;
-        private readonly IValidation _validation;
         private readonly IGeocoder _geoCoder;
 
-        public MissionsManagerApi(IInputData inputData, IValidation validation, IGeocoder geoCoder)
+        public MissionsManagerApi(IGeocoder geoCoder)
         {
-            _inputData = inputData;
-            _validation = validation;
+
             _geoCoder = geoCoder;
         }
 
-        public Task<FindCountryByIsolationResponse> FindCountryByIsolation(HttpRequest req, HttpResponse res, IDocumentStore store)
+        // this can throw OutOfMemory, NREs, perhaps anything else? Needs to be taken into account
+        public Task<MostIsolationDegreeCountryResponse> FindCountryByIsolation(IDocumentStore store)
         {
             var isolationDegree = 0;
             var countryWithMostIsolationDegree = "Unknown";
-            using (var session = store.OpenSession())
+
+            try
             {
-                // Find Agents that took part only in one mission (isolated Agents)
-                // group by Agent and select only with count 1
-                IList<IsolatedAgents_Total.Result> resultIsolatedAgents =
-                    session
-                        .Query<IsolatedAgents_Total.Result, IsolatedAgents_Total>()
-                        .Where(x => x.count == 1)
+                //TODO: consider using Polly for queries and perhaps retry on transient network issues?
+                using (var session = store.OpenSession())
+                {
+                    // Group by Agents to count missions that they took part in
+                    var agentsByMissionsQuantity = session.Query<Mission>()
+                        .GroupBy(x => x.Agent)
+                        .Select(g =>
+                            new {Agent = g.Key, MissionsCount = g.Count()})
                         .ToList();
 
-                var isolatedAgentsList = new StringBuilder();
-                foreach (var agent in resultIsolatedAgents)
-                {
-                    isolatedAgentsList.Append("'").Append(agent.Agent).Append("',");
-                }
-                isolatedAgentsList.Remove(isolatedAgentsList.Length - 1, 1);
+                    // Find Agents that took part only in one mission (isolated Agents)
+                    // select only with MissionsCount == 1
+                    var isolatedAgentsList = agentsByMissionsQuantity
+                        .Where(x => x.MissionsCount == 1)
+                        .Select(x => x.Agent)
+                        .ToList();
 
-                // Get countries of missions that isolated Agents took part in
-                var resultCountryWithIsolatedAgents = session.Advanced.RawQuery<Mission>
-                (
-                    @$"from Missions as m
-                        where m.Agent in ({isolatedAgentsList})
-                        select {{ Country: m.Country, Agent: m.Agent}}"
-                ).ToList();
+                    // Find missions only with isolated agents
+                    var resultCountryWithIsolatedAgents =
+                        session.Query<Mission>()
+                            .Where(x => x.Agent.In(isolatedAgentsList))
+                            .ToList();
 
-                // Clear table with countries with missions that isolated agents took part
-                var operation = store
-                    .Operations
-                    .Send(new DeleteByQueryOperation(new IndexQuery
+                    // Group by Country to count isolated agents in it
+                    // Find CountryIsolationDegree - Country with maximal isolated Agents
+                    var countriesByIsolationDegree =
+                        resultCountryWithIsolatedAgents
+                            .GroupBy(x => x.Country)
+                            .Select(g =>
+                                new {Country = g.Key, CountryIsolationDegree = g.Count()})
+                            .OrderByDescending(g => g.CountryIsolationDegree)
+                            .ToList();
+
+                    if (countriesByIsolationDegree.Any())
                     {
-                        Query = "from IsolatedCountries"
-                    }));
-
-                operation.WaitForCompletion(TimeSpan.FromSeconds(15));
-
-                // Store data about countries with missions that isolated agents took part
-                foreach (var doc in resultCountryWithIsolatedAgents)
-                {
-                    session.Store(new IsolatedCountry { Country = doc.Country, Agent = doc.Agent });
+                        isolationDegree = countriesByIsolationDegree[0].CountryIsolationDegree;
+                        countryWithMostIsolationDegree = countriesByIsolationDegree[0].Country;
+                    }
                 }
-                session.SaveChanges();
-                operation.WaitForCompletion(TimeSpan.FromSeconds(15));
 
-                // Find country with most isolation degree
-                IList<IsolatedCountry> countriesByIsolationDegree = session
-                    .Query<Country_Total.Result, Country_Total>()
-                    .OfType<IsolatedCountry>()
-                    .OrderByDescending(x => (int)x.Count)
-                    .ToList();
-
-                if (countriesByIsolationDegree.Any())
+                return Task.FromResult(new MostIsolationDegreeCountryResponse
                 {
-                    isolationDegree = countriesByIsolationDegree[0].Count;
-                    countryWithMostIsolationDegree = countriesByIsolationDegree[0].Country;
-                }
+                    MostIsolationDegreeCountry = countryWithMostIsolationDegree,
+                    IsolationDegree = isolationDegree,
+                    ErrorStatus = new ErrorStatus{ErrorType = ErrorType.OK}
+                });
             }
-
-            res.StatusCode = 200;
-            return Task.FromResult(new FindCountryByIsolationResponse { MostIsolationDegreeCountry = countryWithMostIsolationDegree, IsolationDegree = isolationDegree });
+            catch (Exception e) //what happens if there is a timeout from the DB? 
+            {
+                return Task.FromResult(new MostIsolationDegreeCountryResponse
+                {
+                    MostIsolationDegreeCountry = countryWithMostIsolationDegree,
+                    IsolationDegree = isolationDegree,
+                    ErrorStatus = new ErrorStatus { ErrorType = ErrorType.Error, ErrorMessage = e.Message, StackTrace = e.StackTrace }
+                });
+            }
         }
 
-        public async Task AddMissionAsync(HttpRequest req, HttpResponse res, IDocumentStore store)
+        public async Task<ErrorStatus> AddMissionAsync(Dictionary<string, string> bodyArguments, IDocumentStore store)
         {
-            var bodyArguments = _inputData.GetBodyArguments(req, res);
-            _validation.ValidateMandatoryFields(bodyArguments, 
-                    new string[] { "agent", "country", "address", "date" }, res);
-
-            // Add mission to DB
-            using (var session = store.OpenAsyncSession())
-            {
-                var (latitude, longitude) =
-                    GetGeolocation(bodyArguments["address"] + " " + bodyArguments["country"]);
-                await session.StoreAsync(new Mission 
-                    { Agent = bodyArguments["agent"], 
-                        Country = bodyArguments["country"], 
-                        Address = bodyArguments["address"], 
-                        Date = DateTime.Parse(bodyArguments["date"]),
+            try{
+                // Add mission to DB
+                using (var session = store.OpenAsyncSession())
+                {
+                    var (latitude, longitude) =
+                        GetGeolocation(bodyArguments["address"] + " " + bodyArguments["country"]);
+                    await session.StoreAsync(new Mission
+                    {
+                        Agent = bodyArguments["agent"],
+                        Country = bodyArguments["country"],
+                        Address = bodyArguments["address"],
+                        Date = DateTime.Parse(bodyArguments["date"]), //what if "date" is malformed? This will throw
                         Latitude = latitude,
                         Longitude = longitude
-                });
-                await session.SaveChangesAsync();
-                res.StatusCode = 200;
+                    });
+                    await session.SaveChangesAsync();
+                    return new ErrorStatus {ErrorType = ErrorType.OK};
+                }
+            }
+            catch (Exception e) //what happens if there is a timeout from the DB? 
+            {
+                return new ErrorStatus
+                    {ErrorType = ErrorType.Error, ErrorMessage = e.Message, StackTrace = e.StackTrace};
             }
         }
 
-        public Task FindClosestMission(HttpRequest req, HttpResponse res, IDocumentStore store)
+        public Task<ClosestMissionResponse> FindClosestMission(Dictionary<string, string> bodyArguments, IDocumentStore store)
         {
-            var bodyArguments = _inputData.GetBodyArguments(req, res);
-            _validation.ValidateMandatoryFields(bodyArguments,
-                new string[] { "target-location" }, res);
-
             using (var session = store.OpenSession())
             {
                 var (latitude, longitude) =
                     GetGeolocation(bodyArguments["target-location"]);
 
-                var closestMissions = session.Query<Mission, Spatial_Index>()
+                // radius should be configurable
+                var closestMissions = session.Query<Mission, MissionLocation_Index>()
                     .Spatial("Coordinates", factory => factory.WithinRadius(10, latitude, longitude))
                     .Customize(x => x
-                        .WaitForNonStaleResults()
+                        .WaitForNonStaleResults() //potential thread starvation, under load this can take A LONG time
+                                                 //TODO: this needs a "timeout" for waiting, 1 or 2 sec probably
                     ).ToList();
 
-                res.StatusCode = 200;
-                return Task.FromResult(closestMissions);
+                return Task.FromResult(new ClosestMissionResponse
+                {
+                    MissionsList = closestMissions,
+                    ErrorStatus = new ErrorStatus(){ErrorType = ErrorType.OK}
+                });
             }
         }
 
-        public async Task InitMissionAsync(HttpRequest req, HttpResponse res, IDocumentStore store)
+        public async Task<ErrorStatus> InitMissionAsync(Dictionary<string, string> bodyArguments, IDocumentStore store)
         {
-            var bodyArguments = _inputData.GetBodyArguments(req, res);
-            _validation.ValidateMandatoryFields(bodyArguments,
-                new string[] { "sample-data" }, res);
-
             var sampleDataJson = bodyArguments["sample-data"];
+            
             Mission[] sampleData = null;
             try
             {
@@ -155,17 +150,13 @@ namespace MissionsManager.V1
             catch (Exception e)
             {
                 var errorMessage = $"{e.Message}:\n{sampleDataJson}";
-                res.StatusCode = 500;
-                await res.AsJson(errorMessage);
-                throw new ArgumentException(errorMessage, e);
+                return new ErrorStatus { ErrorType = ErrorType.Error, ErrorMessage = errorMessage, StackTrace = e.StackTrace};
             }
 
             if (sampleData == null)
             {
                 var errorMessage = $"Failed to convert provided data:\n{sampleDataJson}";
-                res.StatusCode = 500;
-                await res.AsJson(errorMessage);
-                throw new ArgumentException(errorMessage);
+                return new ErrorStatus { ErrorType = ErrorType.Error, ErrorMessage = errorMessage };
             }
 
             // Add mission to DB
@@ -186,8 +177,13 @@ namespace MissionsManager.V1
                             Longitude = longitude
                         });
                 }
+
+                //for very large number of missions, this will throw a timeout
+                //any insert of many documents needs to take this into account
+                //TODO: consider using BulkInsert
+                //https://ravendb.net/docs/article-page/4.2/csharp/client-api/bulk-insert/how-to-work-with-bulk-insert-operation
                 await session.SaveChangesAsync();
-                res.StatusCode = 200;
+                return new ErrorStatus { ErrorType = ErrorType.OK};
             }
         }
 

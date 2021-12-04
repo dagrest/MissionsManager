@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Http;
 
 namespace MissionsManager.V1
 {
+    //TODO: revise error handling!
+    //TODO: revise validations!
     public class InputData : IInputData
     {
         public Dictionary<string, string> GetBodyArguments(HttpRequest req, HttpResponse res)

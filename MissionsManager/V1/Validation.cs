@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace MissionsManager.V1
 {
+    //TODO: consider using https://fluentvalidation.net/ rules instead
     public class Validation : IValidation
     {
         public void ValidateMandatoryFields(Dictionary<string, string> arguments, string[] mandatoryFieldsList, HttpResponse res)

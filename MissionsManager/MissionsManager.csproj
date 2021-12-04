@@ -9,6 +9,7 @@
     <PackageReference Include="Autofac" Version="6.3.0" />
     <PackageReference Include="Autofac.Extensions.DependencyInjection" Version="7.2.0" />
     <PackageReference Include="Carter" Version="5.2.0" />
+    <PackageReference Include="FluentValidation" Version="10.3.5" />
     <PackageReference Include="Google.Maps.Geocoding.NET-API" Version="1.0.0" />
     <PackageReference Include="RavenDB.Embedded" Version="5.2.4" />
   </ItemGroup>
