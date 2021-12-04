@@ -4,6 +4,7 @@ using Autofac.Extensions.DependencyInjection;
 using Carter;
 using GoogleMapsGeocoding;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -15,10 +16,10 @@ namespace MissionsManager
 {
     public class Startup
     {
-        private const string GoogleApiKey = "AIzaSyD23uaUWMgEeFeXESUtttRB_fbJBliXcQQ";
+        private const string GoogleApiKey = "GOOGLE_API_KEY";
         public IConfigurationRoot Configuration { get; private set; }
         public ILifetimeScope AutofacContainer { get; private set; }
-        public Startup(IHostingEnvironment env)
+        public Startup(IHostEnvironment env)
         {
             // In ASP.NET Core 3.0 env will be an IWebHostEnvironment , not IHostingEnvironment.
             var builder = new ConfigurationBuilder()
@@ -50,7 +51,9 @@ namespace MissionsManager
             builder.RegisterType<InitRavenDb>().As<IInitRavenDb>().SingleInstance();
             builder.RegisterType<Validation>().As<IValidation>().SingleInstance();
             builder.RegisterType<InputData>().As<IInputData>().SingleInstance();
-            builder.Register(c => new Geocoder(GoogleApiKey)).As<IGeocoder>().SingleInstance();
+            builder.Register(c => 
+                new Geocoder(Environment.GetEnvironmentVariable(GoogleApiKey)))
+                .As<IGeocoder>().SingleInstance();
             // ************************************************************************************
 
             AutofacContainer = builder.Build();
