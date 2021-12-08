@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Threading.Tasks;
 using GoogleMapsGeocoding;
 using MissionsManager.V1.DB;
@@ -117,23 +118,37 @@ namespace MissionsManager.V1
 
         public Task<ClosestMissionResponse> FindClosestMission(Dictionary<string, string> bodyArguments, IDocumentStore store)
         {
-            using (var session = store.OpenSession())
+            try
             {
-                var (latitude, longitude) =
-                    GetGeolocation(bodyArguments["target-location"]);
+                using (var session = store.OpenSession())
+                {
+                    var (latitude, longitude) =
+                        GetGeolocation(bodyArguments["target-location"]);
 
-                // radius should be configurable
-                var closestMissions = session.Query<Mission, MissionLocation_Index>()
-                    .Spatial("Coordinates", factory => factory.WithinRadius(10, latitude, longitude))
-                    .Customize(x => x
-                        .WaitForNonStaleResults() //potential thread starvation, under load this can take A LONG time
-                                                 //TODO: this needs a "timeout" for waiting, 1 or 2 sec probably
-                    ).ToList();
+                    // radius should be configurable
+                    var closestMissions = session.Query<Mission, MissionLocation_Index>()
+                        .Spatial("Coordinates", factory => factory.WithinRadius(10, latitude, longitude))
+                        .Customize(x => x
+                                .WaitForNonStaleResults() //potential thread starvation, under load this can take A LONG time
+                            //TODO: this needs a "timeout" for waiting, 1 or 2 sec probably
+                        ).ToList();
 
+                    return Task.FromResult(new ClosestMissionResponse
+                    {
+                        MissionsList = closestMissions,
+                        ErrorStatus = new ErrorStatus() {ErrorType = ErrorType.OK}
+                    });
+                }
+            }
+            catch (Exception e)
+            {
                 return Task.FromResult(new ClosestMissionResponse
                 {
-                    MissionsList = closestMissions,
-                    ErrorStatus = new ErrorStatus(){ErrorType = ErrorType.OK}
+                    MissionsList = null,
+                    ErrorStatus = new ErrorStatus 
+                        { ErrorType = ErrorType.Error, 
+                            ErrorMessage = e.Message, 
+                            StackTrace = e.StackTrace }
                 });
             }
         }
