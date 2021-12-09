@@ -9,6 +9,8 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
     <PackageReference Include="NSubstitute" Version="4.2.2" />
     <PackageReference Include="NUnit" Version="3.13.2" />
+    <PackageReference Include="RavenDB.Embedded" Version="5.2.4" />
+    <PackageReference Include="RavenDB.TestDriver" Version="5.2.4" />
   </ItemGroup>
 
   <ItemGroup>

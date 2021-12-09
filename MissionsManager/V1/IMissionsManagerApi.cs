@@ -6,8 +6,6 @@ using Raven.Client.Documents;
 
 namespace MissionsManager.V1
 {
-    //"leaky" abstraction - the API should not depend on HttpRequest/HttpResponse
-    //much easier to test this way
     public interface IMissionsManagerApi
     {
         public Task<MostIsolationDegreeCountryResponse> FindCountryByIsolation(
